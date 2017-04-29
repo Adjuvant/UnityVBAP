@@ -1,5 +1,5 @@
 SRCS=AudioPluginUtil.cpp \
-Plugin_Spatializer.cpp \
+VBAP_Spatializer.cpp \
 Plugin_SpatializerReverb.cpp \
 hrtftable.cpp
 OBJS=$(SRCS:.cpp=.o)
