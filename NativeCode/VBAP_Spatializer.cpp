@@ -1,6 +1,7 @@
 // Please note that this will only work on Unity 5.2 or higher.
 
 #include "AudioPluginUtil.h"
+#include "VBAP.h"
 
 extern float hrtfSrcData[];
 extern float reverbmixbuffer[];
@@ -82,12 +83,6 @@ namespace VBAPSpatializer
                     }
                 }
             }
-			/*
-			for(int i=0;i<2;++i){
-				for(int j=0;j<HRTFLEN;++j)
-					second_half_y[i][j]=0;
-			}
-			*/
         }
     };
 
@@ -95,19 +90,26 @@ namespace VBAPSpatializer
 
     struct InstanceChannel
     {
-        UnityComplexNumber h[HRTFLEN * 2];
-        UnityComplexNumber x[HRTFLEN * 2];
+        //UnityComplexNumber h[HRTFLEN * 2];
+	UnityComplexNumber h_now[HRTFLEN * 2];
+	UnityComplexNumber h_prev[HRTFLEN * 2];
+	UnityComplexNumber h_swap[HRTFLEN * 2];
+	UnityComplexNumber x[HRTFLEN * 2];
         UnityComplexNumber y[HRTFLEN * 2];
         //float buffer[HRTFLEN * 2];
-		float buffer[HRTFLEN];
-		bool isFirstBuf=true;
+	float buffer[HRTFLEN];
+	bool isFirstBuf=true;
+	
     };
 
     struct EffectData
     {
         float p[P_NUM];
         InstanceChannel ch[2];
+    	
     };
+
+	static VBAP vbap;
 
     inline bool IsHostCompatible(UnityAudioEffectState* state)
     {
@@ -232,10 +234,51 @@ namespace VBAPSpatializer
         float elevation = atan2f(dir_y, sqrtf(dir_x * dir_x + dir_z * dir_z) + 0.001f) * kRad2Deg;
         float spatialblend = state->spatializerdata->spatialblend;
         float reverbmix = state->spatializerdata->reverbzonemix;
-
-        GetHRTF(0, data->ch[0].h, azimuth, elevation);
-        GetHRTF(1, data->ch[1].h, azimuth, elevation);
-
+	double gain_vector [3];
+	VBAP::Triplet triplet;
+	vbap.findVBAP_gain(azimuth,elevation,gain_vector,&triplet);
+//	for (int h=0;h<3;++h){
+//		for(int r;r<2;++r)
+		//	GetHRTF(r,data->h[h*2+r],(float)triplet.polar[h].azimuth,(float)triplet.polar[h].elevation);
+		//GetHRTF(r,data->ch[r].h[h],0,0);
+//	}
+//	GetHRTF(0, data->ch[0].h, azimuth, elevation);
+ //       GetHRTF(1, data->ch[1].h, azimuth, elevation);
+	GetHRTF(0,data->ch[0].h_now,triplet.polar[0].azimuth,triplet.polar[0].elevation);
+	GetHRTF(1,data->ch[1].h_now,triplet.polar[0].azimuth,triplet.polar[0].elevation);
+	for(int n=0;n<HRTFLEN*2;++n){
+		UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_now[n],gain_vector[0],data->ch[0].h_now[n]);
+		UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_now[n],gain_vector[0],data->ch[1].h_now[n]);
+	}
+	GetHRTF(0,data->ch[0].h_swap,triplet.polar[1].azimuth,triplet.polar[1].elevation);
+	GetHRTF(1,data->ch[1].h_swap,triplet.polar[1].azimuth,triplet.polar[1].elevation);
+	for(int n=0;n<HRTFLEN*2;++n){
+		UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_swap[n],gain_vector[1],data->ch[0].h_swap[n]);
+		UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_swap[n],gain_vector[1],data->ch[1].h_swap[n]);
+		UnityComplexNumber::Add<float,float,float>(data->ch[0].h_swap[n],data->ch[0].h_now[n],data->ch[0].h_now[n]);
+		UnityComplexNumber::Add<float,float,float>(data->ch[1].h_swap[n],data->ch[1].h_now[n],data->ch[1].h_now[n]);
+	}
+	GetHRTF(0,data->ch[0].h_swap,triplet.polar[2].azimuth,triplet.polar[2].elevation);
+	GetHRTF(1,data->ch[1].h_swap,triplet.polar[2].azimuth,triplet.polar[2].elevation);
+   	for(int n=0;n<HRTFLEN*2;++n){
+		UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_swap[n],gain_vector[2],data->ch[0].h_swap[n]);
+		UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_swap[n],gain_vector[2],data->ch[1].h_swap[n]);
+		UnityComplexNumber::Add<float,float,float>(data->ch[0].h_swap[n],data->ch[0].h_now[n],data->ch[0].h_now[n]);
+		UnityComplexNumber::Add<float,float,float>(data->ch[1].h_swap[n],data->ch[1].h_now[n],data->ch[1].h_now[n]);
+		data->ch[0].h_swap[n]=data->ch[0].h_now[n];
+		data->ch[1].h_swap[n]=data->ch[1].h_now[n];
+		if(!data->ch[0].isFirstBuf){
+			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_now[n],0.1,data->ch[0].h_now[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_now[n],0.1,data->ch[1].h_now[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_prev[n],0.9,data->ch[0].h_prev[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_prev[n],0.9,data->ch[1].h_prev[n]);
+			UnityComplexNumber::Add<float,float,float>(data->ch[0].h_now[n],data->ch[0].h_prev[n],data->ch[0].h_now[n]);
+			UnityComplexNumber::Add<float,float,float>(data->ch[1].h_now[n],data->ch[1].h_prev[n],data->ch[1].h_now[n]);
+		}
+		data->ch[0].h_prev[n]=data->ch[0].h_swap[n];
+		data->ch[1].h_prev[n]=data->ch[1].h_swap[n];
+	}
+   
         // From the FMOD documentation:
         //   A spread angle of 0 makes the stereo sound mono at the point of the 3D emitter.
         //   A spread angle of 90 makes the left part of the stereo sound place itself at 45 degrees to the left and the right part 45 degrees to the right.
@@ -245,6 +288,8 @@ namespace VBAPSpatializer
         // That way we can still use it to control how the source signal downmixing takes place.
         float spread = cosf(state->spatializerdata->spread * kPI / 360.0f);
         float spreadmatrix[2] = { 2.0f - spread, spread };
+	
+	UnityComplexNumber swap;
 
         float* reverb = reverbmixbuffer;
         for (int sampleOffset = 0; sampleOffset < length; sampleOffset += HRTFLEN)
@@ -270,28 +315,32 @@ namespace VBAPSpatializer
                     //ch.buffer[n] = ch.buffer[n + HRTFLEN];
                     //ch.buffer[n + HRTFLEN] = left * spreadmatrix[c] + right * spreadmatrix[1 - c];
                     //ch.buffer[n + HRTFLEN] = 0;
-                    ch.x[n].re = inbuffer[n * 2] * spreadmatrix[c] + inbuffer[n * 2 + 1] * spreadmatrix[1 - c];
-					ch.x[n].im = 0.0f;
+                    	ch.x[n].re = inbuffer[n * 2] * spreadmatrix[c] + inbuffer[n * 2 + 1] * spreadmatrix[1 - c];
+			ch.x[n].im = 0.0f;
                 }
-				/*
-                for (int n = 0; n < HRTFLEN * 2; n++)            
-				{
-                    ch.x[n].re = ch.buffer[n];
-                    ch.x[n].im = 0.0f;
-                }
-				*/
-                for (int n = HRTFLEN; n < HRTFLEN * 2; n++)            
-				{
+				
+ //               for (int n = 0; n < HRTFLEN * 2; n++)            
+//				{
+//                    ch.x[n].re = ch.buffer[n];
+//                    ch.x[n].im = 0.0f;
+//                }
+				
+                for (int n = HRTFLEN; n < HRTFLEN * 2; n++){
                     ch.x[n].re = 0.0f;
                     ch.x[n].im = 0.0f;
                 }
 
 
                 FFT::Forward(ch.x, HRTFLEN * 2, false);
-
-                for (int n = 0; n < HRTFLEN * 2; n++)
-                    UnityComplexNumber::Mul<float, float, float>(ch.x[n], ch.h[n], ch.y[n]);
-
+	                for (int n = 0; n < HRTFLEN * 2; n++){
+	//		for(int t=0;t<3;++t){
+                   		UnityComplexNumber::Mul<float, float, float>(ch.x[n], ch.h_now[n], ch.y[n]);
+		//		UnityComplexNumber::Scale<float,double,float>(ch.y[t][n],gain_vector[t],ch.y[t][n]);
+	//			if(t>0){
+//					UnityComplexNumber::Add<float,float,float>(ch.y[t][n],ch.y[0][n],ch.y[0][n]);
+//				}	
+	//		}
+		}
                 FFT::Backward(ch.y, HRTFLEN * 2, false);
 				//something is wrong with the FFT
 				//the first half and the second half are swapped, that's why I(Wing) modified the following code
@@ -301,8 +350,8 @@ namespace VBAPSpatializer
                     float s = inbuffer[n * 2 + c] * stereopan;
 					//ch.y[n+HRTFLEN].re += sharedData.second_half_y[c][n];
 					//sharedData.second_half_y[c][n]=ch.y[n].re;
-					ch.y[n+HRTFLEN].re+=ch.buffer[n];
-					ch.buffer[n]=ch.y[n].re;
+		    ch.y[n+HRTFLEN].re+=ch.buffer[n];
+		    ch.buffer[n]=ch.y[n].re;
                     float y = s + (ch.y[n+HRTFLEN].re * GAINCORRECTION - s) * spatialblend;
                     outbuffer[n * 2 + c] = y;
                     reverb[n * 2 + c] += y * reverbmix;
