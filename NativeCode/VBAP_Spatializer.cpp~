@@ -268,10 +268,10 @@ namespace VBAPSpatializer
 		data->ch[0].h_swap[n]=data->ch[0].h_now[n];
 		data->ch[1].h_swap[n]=data->ch[1].h_now[n];
 		if(!data->ch[0].isFirstBuf){
-			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_now[n],0.00001,data->ch[0].h_now[n]);
-			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_now[n],0.00001,data->ch[1].h_now[n]);
-			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_prev[n],0.99999,data->ch[0].h_prev[n]);
-			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_prev[n],0.99999,data->ch[1].h_prev[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_now[n],0.000001,data->ch[0].h_now[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_now[n],0.000001,data->ch[1].h_now[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[0].h_prev[n],0.999999,data->ch[0].h_prev[n]);
+			UnityComplexNumber::Scale<float,double,float>(data->ch[1].h_prev[n],0.999999,data->ch[1].h_prev[n]);
 			UnityComplexNumber::Add<float,float,float>(data->ch[0].h_now[n],data->ch[0].h_prev[n],data->ch[0].h_now[n]);
 			UnityComplexNumber::Add<float,float,float>(data->ch[1].h_now[n],data->ch[1].h_prev[n],data->ch[1].h_now[n]);
 		}
