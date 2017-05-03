@@ -25,7 +25,8 @@ DECLARE_EFFECT("Demo LoudnessMeter", LoudnessMeter)
 DECLARE_EFFECT("Demo Oscilloscope", Oscilloscope)
 DECLARE_EFFECT("Demo Routing", Routing)
 */
-DECLARE_EFFECT("VBAP Spatializer", Spatializer)
+//DECLARE_EFFECT("VBAP Spatializer", Spatializer)
+DECLARE_EFFECT("VBAP Spatializer", VBAPSpatializer)
 DECLARE_EFFECT("Demo Spatializer Reverb", SpatializerReverb)
 
 #endif
